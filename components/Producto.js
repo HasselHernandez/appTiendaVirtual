@@ -4,12 +4,15 @@ import { Ionicons } from "@expo/vector-icons";
 const Producto = (props) => {
     return (
         <View style={styles.tarjeta}>
-            <View style={[styles.contenedorImagen, { backgroundColor: props.color }]}>  <Image source={{ uri: props.imagen }} style={styles.imagen} />  </View>
+            <View style={[styles.contenedorImagen, { backgroundColor: props.color }]}>
+                <Image source={{ uri: props.imagen }} style={styles.imagen} />
+            </View>
             <View style={styles.informacion}>
                 <View style={styles.filaPrecio}>
                     <Text style={styles.precio}>$ {props.precio}</Text>
                     <TouchableOpacity>
-                        <Ionicons name="heart-outline" size={20} color="#BFC2D9" />  </TouchableOpacity>
+                        <Ionicons name="heart-outline" size={20} color="#BFC2D9" />
+                    </TouchableOpacity>
                 </View>
                 <Text style={styles.nombre} numberOfLines={1}>
                     {props.nombre}

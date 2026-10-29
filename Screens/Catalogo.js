@@ -1,17 +1,23 @@
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  ScrollView,
+  FlatList,
+} from "react-native";
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, StyleSheet, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "../firebase/config";
 import Categoria from "../components/Categoria";
 import Producto from "../components/Producto";
-
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../firebase/config";
 
 const Catalogo = () => {
+  const [busqueda, setBusqueda] = useState("");
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState("todos");
   const [categorias, setCategorias] = useState([]);
   const [productos, setProductos] = useState([]);
-  const [busqueda, setBusqueda] = useState("");
-
 
   useEffect(() => {
     obtenerCategorias();
@@ -22,15 +28,39 @@ const Catalogo = () => {
     try {
       const querySnapshot = await getDocs(collection(db, "Categorias"));
       const datos = [];
+      let hayIdsInvalidos = false;
       querySnapshot.forEach((doc) => {
-        datos.push({ id: doc.id, ...doc.data() });
+        const datosCategoria = doc.data();
+        const idCategoria = [
+          datosCategoria.categoriaId,
+          datosCategoria.id,
+        ].find(
+          (valor) =>
+            valor !== null &&
+            valor !== undefined &&
+            String(valor).trim() !== "" &&
+            Number.isSafeInteger(Number(valor)) &&
+            Number(valor) >= 0
+        );
+        const idNumerico = Number(idCategoria);
+        if (idCategoria === undefined) {
+          hayIdsInvalidos = true;
+          return;
+        }
+
+        datos.push({
+          ...datosCategoria,
+          id: idNumerico,
+        });
       });
+      if (hayIdsInvalidos) {
+        console.warn("Se omitieron categorías sin un id numérico.");
+      }
       setCategorias(datos);
     } catch (error) {
       console.error("Error obteniendo categorías: ", error);
     }
   };
-
 
   const obtenerProductos = async () => {
     try {
@@ -45,35 +75,56 @@ const Catalogo = () => {
     }
   };
 
-  const obtenerProductosPorCategoria = async (categoriaId) => {
-    try {
-      const consulta = query(
-        collection(db, "Productos"),
-        where("idCategoria", "==", categoriaId)
-      );
-      const consultaSnapshot = await getDocs(consulta);
-      const datos = [];
-      consultaSnapshot.forEach((documento) => {
-        datos.push({ id: documento.id, ...documento.data() });
+  const categoriasConTodos = [
+    { id: "todos", nombre: "Todos", icono: "grid-outline" },
+    ...categorias,
+  ];
+
+  const normalizarTexto = (valor) =>
+    String(valor ?? "").trim().toLowerCase();
+
+  const productosFiltrados = productos.filter((producto) => {
+    const categoriaProducto = normalizarTexto(
+      producto.categoriaId ?? producto.categoria ?? producto.categoriaNombre ?? ""
+    );
+    const categoriaSeleccionadaNormalizada = normalizarTexto(categoriaSeleccionada);
+
+    const coincideCategoria =
+      categoriaSeleccionada === "todos" ||
+      categoriaProducto === categoriaSeleccionadaNormalizada ||
+      categorias.some((categoria) => {
+        const opcionesCategoria = [
+          normalizarTexto(categoria.id),
+          normalizarTexto(categoria.nombre),
+        ];
+
+        return (
+          opcionesCategoria.includes(categoriaProducto) &&
+          opcionesCategoria.includes(categoriaSeleccionadaNormalizada)
+        );
       });
-      setProductos(datos);
-    } catch (error) {
-      console.error("Error obteniendo productos por categoría:", error);
-    }
+
+    const nombreProducto = (producto.nombre || "").toLowerCase();
+    const coincideBusqueda = nombreProducto.includes(busqueda.toLowerCase());
+
+    return coincideCategoria && coincideBusqueda;
+  });
+
+  const seleccionarCategoria = (categoriaId) => {
+    setCategoriaSeleccionada(categoriaId);
   };
 
-  const productosFiltrados = productos.filter((producto) =>
-producto.nombre.toLowerCase().includes(busqueda.toLowerCase())
-);
-
   return (
-    <ScrollView style={styles.contenedor}>
+    <ScrollView
+      style={styles.contenedor}
+      contentContainerStyle={styles.contenedorContenido}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.buscador}>
         <Ionicons name="search-outline" size={18} color="#7C7CFF" />
-
         <TextInput
           placeholder="Buscar producto"
-          placeholderTextColor="#0d0dda"
+          placeholderTextColor="#B5B5D5"
           style={styles.input}
           value={busqueda}
           onChangeText={setBusqueda}
@@ -84,11 +135,14 @@ producto.nombre.toLowerCase().includes(busqueda.toLowerCase())
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.categorias}
+        contentContainerStyle={styles.categoriasContenido}
       >
-        {categorias.map((categoria) => (
+        {categoriasConTodos.map((categoria) => (
           <Categoria
-            key={categoria.id} nombre={categoria.nombre} icono={categoria.icono}
-            onPress={() => obtenerProductosPorCategoria(categoria.id)}
+            key={categoria.id}
+            nombre={categoria.nombre}
+            icono={categoria.icono}
+            onPress={() => seleccionarCategoria(categoria.id)}
           />
         ))}
       </ScrollView>
@@ -97,20 +151,16 @@ producto.nombre.toLowerCase().includes(busqueda.toLowerCase())
       <Text style={styles.titulo}>News</Text>
 
       <View style={styles.productos}>
-        <FlatList
-          data={productosFiltrados}
-          scrollEnabled={false}
-          style={styles.contenedor}
-          
-          renderItem={({ item }) => (
-            <Producto
-              nombre={item.nombre} precio={item.precio} tiempo={item.tiempo} color={item.color} imagen={item.imagen}
-            />
-          )}
-          keyExtractor={(item) => item.id.toString()}
-          horizontal={false}
-          numColumns={2}
-        />
+        {productosFiltrados.map((producto) => (
+          <Producto
+            key={producto.id}
+            nombre={producto.nombre}
+            precio={producto.precio}
+            imagen={producto.imagen}
+            color={producto.color || "#F4F4F4"}
+            tiempo={producto.tiempo || "Hoy"}
+          />
+        ))}
       </View>
     </ScrollView>
   );
@@ -141,6 +191,9 @@ const styles = StyleSheet.create({
   categorias: {
     marginBottom: 10,
   },
+  categoriasContent: {
+    paddingRight: 12,
+  },
   linea: {
     height: 3,
     backgroundColor: "#AAAAAA",
@@ -156,6 +209,13 @@ const styles = StyleSheet.create({
   productos: {
     flexDirection: "row",
     flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingBottom: 20,
+  },
+  listaProductos: {
+    paddingBottom: 20,
+  },
+  columnWrapper: {
     justifyContent: "space-between",
   },
 });
